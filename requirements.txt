@@ -1,0 +1,6 @@
+flake8
+jupyterlab
+numpy
+matplotlib
+seaborn
+torch
