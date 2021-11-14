@@ -50,8 +50,6 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         in_channels: int,
         n_hidden_neurons: int,
         out_channels: int,
-        crossover_propability_treshold: float = 0.0,
-        mutation_propability_treshold: float = 0.0,
     ) -> t.Tuple[n_net.EvolutionAlgNeuralNetwork, History]:
         alg_history = History(losses_per_epoch=[], experiment_time_in_seconds=0)
 
@@ -68,13 +66,10 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         while True:  # replace with proper stop condition
             new_population = self._select4reproduce(curr_population, losses)
 
-            if np.random.uniform() > crossover_propability_treshold:
-                new_population = self._crossover(new_population)
+            new_population = self._crossover(new_population)
+            new_population = self._mutation(new_population)
 
-            if np.random.uniform() > mutation_propability_treshold:
-                new_population = self._mutation(new_population)
-
-            losses, _ = self._assess_population(new_population)
+            losses = self._assess_population(new_population)
             curr_population, losses = self._select_mu_best(new_population, losses)
 
             alg_history.losses_per_epoch.append(losses)
