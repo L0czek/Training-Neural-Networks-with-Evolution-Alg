@@ -1,3 +1,3 @@
 from .data_utils import *
-from .ea_optimizer import *
+from .optimizers import *
 from .neural_nets import *
