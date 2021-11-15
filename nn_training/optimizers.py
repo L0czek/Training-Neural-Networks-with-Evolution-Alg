@@ -76,6 +76,12 @@ class MuLambdaEvolutionStrategy(IOptimizer):
             best_individual_iteration=0,
         )
 
+        number_of_weights = len(
+            n_net.EvolutionAlgNeuralNetwork(
+                in_channels, n_hidden_neurons, out_channels
+            ).get_weights()
+        )
+
         start = time.time()
 
         curr_population = MuLambdaEvolutionStrategy.Population(
@@ -83,7 +89,9 @@ class MuLambdaEvolutionStrategy(IOptimizer):
                 n_net.EvolutionAlgNeuralNetwork(in_channels, n_hidden_neurons, out_channels)
                 for _ in range(self.mu_value)
             ],
-            sigmas=[1 for _ in range(self.mu_value)],
+            sigmas=[
+                [1 for _ in range(number_of_weights)] for _ in range(self.mu_value)
+            ],
         )
 
         losses = self._assess_population(curr_population)
@@ -146,20 +154,6 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         sigmas = [population.sigmas[index] for index in chosen_indices]
         return MuLambdaEvolutionStrategy.Population(individuals=individuals, sigmas=sigmas)
 
-    def _mutation(
-        self, population: MuLambdaEvolutionStrategy.Population
-    ) -> MuLambdaEvolutionStrategy.Population:
-        individuals_as_vector = [net.get_weights() for net in population.individuals]
-        sigmas = [net.get_weights() for net in population.sigmas]
-
-        # Perform mutation
-
-        new_individuals = [
-            net.update_weights(vector)
-            for net, vector in zip(population.individuals, individuals_as_vector)
-        ]
-        return MuLambdaEvolutionStrategy.Population(individuals=new_individuals, sigmas=sigmas)
-
     def _crossover(
         self, population: MuLambdaEvolutionStrategy.Population
     ) -> MuLambdaEvolutionStrategy.Population:
@@ -167,6 +161,20 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         sigmas = [net.get_weights() for net in population.sigmas]
 
         # Perform crossover
+
+        new_individuals = [
+            net.update_weights(vector)
+            for net, vector in zip(population.individuals, individuals_as_vector)
+        ]
+        return MuLambdaEvolutionStrategy.Population(individuals=new_individuals, sigmas=sigmas)
+
+    def _mutation(
+        self, population: MuLambdaEvolutionStrategy.Population, tau: float, tau_prime: float
+    ) -> MuLambdaEvolutionStrategy.Population:
+        individuals_as_vector = [net.get_weights() for net in population.individuals]
+        sigmas = [net.get_weights() for net in population.sigmas]
+
+        # Perform mutation
 
         new_individuals = [
             net.update_weights(vector)
