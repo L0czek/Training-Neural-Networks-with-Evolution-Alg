@@ -50,6 +50,8 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         in_channels: int,
         n_hidden_neurons: int,
         out_channels: int,
+        n_iters: int = 100,
+        best_loss_treshold: float = 1e-3,
     ) -> t.Tuple[n_net.EvolutionAlgNeuralNetwork, History]:
         alg_history = History(losses_per_epoch=[], experiment_time_in_seconds=0)
 
@@ -63,7 +65,8 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         losses = self._assess_population(curr_population)
         alg_history.losses_per_epoch.append(losses)
 
-        while True:  # replace with proper stop condition
+        iteration = 0
+        while iteration < n_iters and max(losses) > best_loss_treshold:
             new_population = self._select4reproduce(curr_population, losses)
 
             new_population = self._crossover(new_population)
@@ -77,7 +80,9 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         end = time.time()
 
         alg_history.experiment_time_in_seconds = end - start
-        self.best_individual = curr_population[0]
+        self.best_individual = (
+            curr_population[0] if iteration != 0 else curr_population[losses.index(min(losses))]
+        )
 
         return self.best_individual, alg_history
 
@@ -104,19 +109,6 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         # replace with something better
         return random.choices(population, k=self.lambda_value)
 
-    def _select_mu_best(
-        self,
-        population: t.List[n_net.EvolutionAlgNeuralNetwork],
-        losses: t.List[float],
-    ) -> t.List[n_net.EvolutionAlgNeuralNetwork]:
-        zipped4sort = zip(losses, population)
-        zipped4sort = sorted(zipped4sort)
-
-        sorted_population = [individual for _, individual in zipped4sort]
-        sorted_losses = [loss for loss, _ in zipped4sort]
-
-        return sorted_population[: self.mu_value], sorted_losses[: self.mu_value]
-
     def _mutation(
         self, population: t.List[n_net.EvolutionAlgNeuralNetwork]
     ) -> t.List[n_net.EvolutionAlgNeuralNetwork]:
@@ -134,3 +126,16 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         # Perform crossover
 
         return [net.update_weights(vector) for net, vector in zip(population, population_as_vector)]
+
+    def _select_mu_best(
+        self,
+        population: t.List[n_net.EvolutionAlgNeuralNetwork],
+        losses: t.List[float],
+    ) -> t.List[n_net.EvolutionAlgNeuralNetwork]:
+        zipped4sort = zip(losses, population)
+        zipped4sort = sorted(zipped4sort)
+
+        sorted_population = [individual for _, individual in zipped4sort]
+        sorted_losses = [loss for loss, _ in zipped4sort]
+
+        return sorted_population[: self.mu_value], sorted_losses[: self.mu_value]
