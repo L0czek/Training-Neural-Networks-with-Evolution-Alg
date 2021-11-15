@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+import copy
 import random
 import time
 import typing as t
@@ -40,7 +41,7 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         sigmas: t.List[float]
 
         def __len__(self) -> int:
-            return len(self.individual)
+            return len(self.individuals)
 
     def __init__(
         self,
@@ -49,7 +50,8 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         optimized_func: t.Callable[[float], float],
         dataset: utils.IDataGenerator,
     ):
-        assert mu_value >= lambda_value
+        assert lambda_value >= mu_value
+
         super().__init__()
 
         self.mu_value = mu_value
@@ -64,6 +66,8 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         in_channels: int,
         n_hidden_neurons: int,
         out_channels: int,
+        mutation_tau: float,
+        mutation_tau_prime: float,
         n_iters: int = 100,
         best_loss_treshold: float = 1e-3,
     ) -> t.Tuple[n_net.EvolutionAlgNeuralNetwork, Experiment]:
@@ -96,15 +100,18 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         alg_trace.losses_per_epoch.append(losses)
 
         min_loss = min(losses)
-        alg_trace.best_individual = curr_population[losses.index(min_loss)]
+        alg_trace.best_individual = curr_population.individuals[losses.index(min_loss)]
         alg_trace.best_individual_loss = min_loss
+        print(f"Epoch 0 loss => {min_loss:.4f}")
 
         iteration = 1
-        while iteration <= n_iters and min(losses) < best_loss_treshold:
+        while iteration <= n_iters and min(losses) > best_loss_treshold:
             new_population = self._select4reproduce(curr_population, losses)
 
+            new_population = self._mutation(
+                new_population, tau=mutation_tau, tau_prime=mutation_tau_prime
+            )
             new_population = self._crossover(new_population)
-            new_population = self._mutation(new_population)
 
             losses = self._assess_population(new_population)
 
@@ -112,9 +119,10 @@ class MuLambdaEvolutionStrategy(IOptimizer):
             curr_population, losses = self._select_mu_best(new_population, losses)
 
             alg_trace.losses_per_epoch.append(losses)
+            print(f"Epoch {iteration} loss => {losses[0]:.4f}")
 
             if losses[0] < alg_trace.best_individual_loss:
-                alg_trace.best_individual = curr_population[0]
+                alg_trace.best_individual = curr_population.individuals[0]
                 alg_trace.best_individual_loss = losses[0]
                 alg_trace.best_individual_iteration = iteration
 
@@ -134,21 +142,28 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         losses = []
 
         for individual in population.individuals:
+            loss = 0.0
             for x in self.dataset:
-                y_pred = individual.predict(x)
+                y_pred = individual.predict([x])
                 y_true = self.optimized_func(x)
 
-                losses.append(ev.MSE(y_pred, y_true))
+                loss += ev.MSE(y_pred, y_true)
+
+            losses.append(loss / len(self.dataset))
 
         return losses
 
     def _select4reproduce(
         self, population: MuLambdaEvolutionStrategy.Population, losses: t.List[float]
     ) -> MuLambdaEvolutionStrategy.Population:
-        # replace with something better
-        chosen_indices = np.random.randint(0, len(population), size=self.lambda_value)
+        losses = np.array(losses)
+        losses = losses.max() - losses
+        selection_probabilities = losses / losses.sum()
+        chosen_indices = np.random.choice(
+            range(len(population)), size=self.lambda_value, p=selection_probabilities
+        )
 
-        individuals = [population.individuals[index] for index in chosen_indices]
+        individuals = [copy.deepcopy(population.individuals[index]) for index in chosen_indices]
         sigmas = [population.sigmas[index] for index in chosen_indices]
         return MuLambdaEvolutionStrategy.Population(individuals=individuals, sigmas=sigmas)
 
@@ -156,10 +171,13 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         self, population: MuLambdaEvolutionStrategy.Population
     ) -> MuLambdaEvolutionStrategy.Population:
         individuals_as_vector = [net.get_weights() for net in population.individuals]
-        sigmas = [net.get_weights() for net in population.sigmas]
+        sigmas = [sigma for sigma in population.sigmas]
 
-        crossovers = random.sample(range(individuals_as_vector), len(individuals_as_vector))
-        crossover_pairs = [(ind_idx * 2, ind_idx * 2 + 1) for ind_idx in range(len(crossovers) // 2)]
+        crossovers = random.sample(range(len(individuals_as_vector)), len(individuals_as_vector))
+        crossover_pairs = [
+            (crossovers[ind_idx * 2], crossovers[ind_idx * 2 + 1])
+            for ind_idx in range(len(crossovers) // 2)
+        ]
 
         new_weights = []
         new_sigmas = []
@@ -179,32 +197,32 @@ class MuLambdaEvolutionStrategy(IOptimizer):
             new_sigmas.append(crossovered_sigma)
 
         # Add last individual to list
-        if crossovers // 2 != 0:
+        if len(crossovers) // 2 != 0:
             new_weights.append(individuals_as_vector[crossovers[-1]])
             new_sigmas.append(sigmas[crossovers[-1]])
 
-        new_individuals = [
-            net.update_weights(vector)
-            for net, vector in zip(new_weights, new_sigmas)
-        ]
+        new_individuals = []
+        for net, weights in zip(population.individuals, new_weights):
+            net.update_weights(weights)
+            new_individuals.append(copy.deepcopy(net))
+
         return MuLambdaEvolutionStrategy.Population(individuals=new_individuals, sigmas=new_sigmas)
 
     def _mutation(
         self, population: MuLambdaEvolutionStrategy.Population, tau: float, tau_prime: float
     ) -> MuLambdaEvolutionStrategy.Population:
         individuals_as_vector = [net.get_weights() for net in population.individuals]
-        sigmas = [net.get_weights() for net in population.sigmas]
 
-        random_values = list(np.random.normal(size=len(sigmas)))
+        random_values = list(np.random.normal(size=len(population.sigmas)))
         sigmas = [
             [
                 float(sigma * np.exp(tau_prime * ind_random + tau * np.random.normal(size=1)))
-                for sigma, ind_random in zip(individual_sigmas, random_values)
+                for sigma in individual_sigmas
             ]
-            for individual_sigmas in sigmas
+            for individual_sigmas, ind_random in zip(population.sigmas, random_values)
         ]
 
-        individuals_as_vector = [
+        new_weights = [
             [
                 float(weight + sigma * np.random.normal(size=1))
                 for weight, sigma in zip(individual_weights, individual_sigmas)
@@ -212,10 +230,11 @@ class MuLambdaEvolutionStrategy(IOptimizer):
             for individual_weights, individual_sigmas in zip(individuals_as_vector, sigmas)
         ]
 
-        new_individuals = [
-            net.update_weights(vector)
-            for net, vector in zip(population.individuals, individuals_as_vector)
-        ]
+        new_individuals = []
+        for net, weights in zip(population.individuals, new_weights):
+            net.update_weights(np.array(weights))
+            new_individuals.append(copy.deepcopy(net))
+
         return MuLambdaEvolutionStrategy.Population(individuals=new_individuals, sigmas=sigmas)
 
     def _select_mu_best(
@@ -225,11 +244,13 @@ class MuLambdaEvolutionStrategy(IOptimizer):
     ) -> t.Tuple[MuLambdaEvolutionStrategy.Population, t.List[float]]:
         individuals, sigmas = population.individuals, population.sigmas
         zipped4sort = zip(losses, individuals, sigmas)
-        zipped4sort = sorted(zipped4sort)
+        zipped4sort = sorted(zipped4sort, key=lambda x: x[0])
 
-        sorted_individuals = [individual for _, individual, _ in zipped4sort]
-        sorted_sigmas = [sigma for _, _, sigma in zipped4sort]
-        sorted_losses = [loss for loss, _, _ in zipped4sort]
+        sorted_losses, sorted_individuals, sorted_sigmas = [], [], []
+        for loss, individual, sigma in zipped4sort:
+            sorted_losses.append(loss)
+            sorted_individuals.append(individual)
+            sorted_sigmas.append(sigma)
 
         return (
             MuLambdaEvolutionStrategy.Population(
