@@ -158,13 +158,36 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         individuals_as_vector = [net.get_weights() for net in population.individuals]
         sigmas = [net.get_weights() for net in population.sigmas]
 
-        # Perform crossover
+        crossovers = random.sample(range(individuals_as_vector), len(individuals_as_vector))
+        crossover_pairs = [(ind_idx * 2, ind_idx * 2 + 1) for ind_idx in range(len(crossovers) // 2)]
+
+        new_weights = []
+        new_sigmas = []
+
+        for f_individual, s_individual in crossover_pairs:
+            f_weights = individuals_as_vector[f_individual]
+            s_weights = individuals_as_vector[s_individual]
+
+            crossovered_weights = (np.array(f_weights) + np.array(s_weights)) / 2.0
+
+            f_sigma = sigmas[f_individual]
+            s_sigma = sigmas[s_individual]
+
+            crossovered_sigma = (np.array(f_sigma) + np.array(s_sigma)) / 2.0
+
+            new_weights.append(crossovered_weights)
+            new_sigmas.append(crossovered_sigma)
+
+        # Add last individual to list
+        if crossovers // 2 != 0:
+            new_weights.append(individuals_as_vector[crossovers[-1]])
+            new_sigmas.append(sigmas[crossovers[-1]])
 
         new_individuals = [
             net.update_weights(vector)
-            for net, vector in zip(population.individuals, individuals_as_vector)
+            for net, vector in zip(new_weights, new_sigmas)
         ]
-        return MuLambdaEvolutionStrategy.Population(individuals=new_individuals, sigmas=sigmas)
+        return MuLambdaEvolutionStrategy.Population(individuals=new_individuals, sigmas=new_sigmas)
 
     def _mutation(
         self, population: MuLambdaEvolutionStrategy.Population, tau: float, tau_prime: float
