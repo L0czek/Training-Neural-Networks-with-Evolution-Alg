@@ -89,9 +89,7 @@ class MuLambdaEvolutionStrategy(IOptimizer):
                 n_net.EvolutionAlgNeuralNetwork(in_channels, n_hidden_neurons, out_channels)
                 for _ in range(self.mu_value)
             ],
-            sigmas=[
-                [1 for _ in range(number_of_weights)] for _ in range(self.mu_value)
-            ],
+            sigmas=[[1 for _ in range(number_of_weights)] for _ in range(self.mu_value)],
         )
 
         losses = self._assess_population(curr_population)
@@ -174,7 +172,22 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         individuals_as_vector = [net.get_weights() for net in population.individuals]
         sigmas = [net.get_weights() for net in population.sigmas]
 
-        # Perform mutation
+        random_values = list(np.random.normal(size=len(sigmas)))
+        sigmas = [
+            [
+                float(sigma * np.exp(tau_prime * ind_random + tau * np.random.normal(size=1)))
+                for sigma, ind_random in zip(individual_sigmas, random_values)
+            ]
+            for individual_sigmas in sigmas
+        ]
+
+        individuals_as_vector = [
+            [
+                float(weight + sigma * np.random.normal(size=1))
+                for weight, sigma in zip(individual_weights, individual_sigmas)
+            ]
+            for individual_weights, individual_sigmas in zip(individuals_as_vector, sigmas)
+        ]
 
         new_individuals = [
             net.update_weights(vector)
