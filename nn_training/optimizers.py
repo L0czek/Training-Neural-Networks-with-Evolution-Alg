@@ -39,6 +39,9 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         individuals: t.List[n_net.EvolutionAlgNeuralNetwork]
         sigmas: t.List[float]
 
+        def __len__(self) -> int:
+            return len(self.individual)
+
     def __init__(
         self,
         mu_value: int,
@@ -137,7 +140,11 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         self, population: MuLambdaEvolutionStrategy.Population, losses: t.List[float]
     ) -> MuLambdaEvolutionStrategy.Population:
         # replace with something better
-        return random.choices(population, k=self.lambda_value)
+        chosen_indices = np.random.randint(0, len(population), size=self.lambda_value)
+
+        individuals = [population.individuals[index] for index in chosen_indices]
+        sigmas = [population.sigmas[index] for index in chosen_indices]
+        return MuLambdaEvolutionStrategy.Population(individuals=individuals, sigmas=sigmas)
 
     def _mutation(
         self, population: MuLambdaEvolutionStrategy.Population
