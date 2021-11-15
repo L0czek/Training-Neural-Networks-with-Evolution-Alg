@@ -13,14 +13,18 @@ import nn_training.neural_nets as n_net
 
 
 @dataclass
-class History:
+class Experiment:
+    name: str
     losses_per_epoch: t.List[t.List[float]]
     experiment_time_in_seconds: float
+    best_individual: n_net.EvolutionAlgNeuralNetwork
+    best_individual_loss: float
+    best_individual_iteration: int
 
 
 class IOptimizer(abc.ABC):
     @abc.abstractclassmethod
-    def optimize(self, **kwargs) -> t.Tuple[n_net.EvolutionAlgNeuralNetwork, History]:
+    def optimize(self, **kwargs) -> t.Tuple[n_net.EvolutionAlgNeuralNetwork, Experiment]:
         pass
 
     @abc.abstractclassmethod
@@ -52,8 +56,15 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         out_channels: int,
         n_iters: int = 100,
         best_loss_treshold: float = 1e-3,
-    ) -> t.Tuple[n_net.EvolutionAlgNeuralNetwork, History]:
-        alg_history = History(losses_per_epoch=[], experiment_time_in_seconds=0)
+    ) -> t.Tuple[n_net.EvolutionAlgNeuralNetwork, Experiment]:
+        alg_trace = Experiment(
+            name="mu_lambda_experiment_name_based_on_param",
+            losses_per_epoch=[],
+            experiment_time_in_seconds=0,
+            best_individual=None,
+            best_individual_loss=float("inf"),
+            best_individual_iteration=0,
+        )
 
         start = time.time()
 
@@ -63,28 +74,41 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         ]
 
         losses = self._assess_population(curr_population)
-        alg_history.losses_per_epoch.append(losses)
+        alg_trace.losses_per_epoch.append(losses)
 
-        iteration = 0
-        while iteration < n_iters and max(losses) > best_loss_treshold:
+        min_loss = min(losses)
+        alg_trace.best_individual = curr_population[losses.index(min_loss)]
+        alg_trace.best_individual_loss = min_loss
+
+        iteration = 1
+        while iteration <= n_iters and min(losses) > best_loss_treshold:
             new_population = self._select4reproduce(curr_population, losses)
 
             new_population = self._crossover(new_population)
             new_population = self._mutation(new_population)
 
             losses = self._assess_population(new_population)
+
+            # Returns sorted by loss in ascending order.
             curr_population, losses = self._select_mu_best(new_population, losses)
 
-            alg_history.losses_per_epoch.append(losses)
+            alg_trace.losses_per_epoch.append(losses)
+
+            if losses[0] < alg_trace.best_individual_loss:
+                alg_trace.best_individual = curr_population[0]
+                alg_trace.best_individual_loss = losses[0]
+                alg_trace.best_individual_iteration = iteration
+
+            iteration += 1
 
         end = time.time()
 
-        alg_history.experiment_time_in_seconds = end - start
+        alg_trace.experiment_time_in_seconds = end - start
         self.best_individual = (
             curr_population[0] if iteration != 0 else curr_population[losses.index(min(losses))]
         )
 
-        return self.best_individual, alg_history
+        return self.best_individual, alg_trace
 
     def best(self) -> n_net.INeuralNetwork:
         return self.best_individual
