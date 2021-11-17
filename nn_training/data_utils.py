@@ -9,5 +9,5 @@ class IDataGenerator(abc.ABC):
         pass
 
     @abc.abstractclassmethod
-    def __next__(self) -> t.Tuple[np.ndarray, np.ndarray]:
+    def __next__(self) -> np.ndarray:
         pass

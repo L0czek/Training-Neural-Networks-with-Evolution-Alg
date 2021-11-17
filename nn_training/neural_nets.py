@@ -41,10 +41,19 @@ class EvolutionAlgNeuralNetwork(INeuralNetwork):
 
     def predict(self, x: np.ndarray) -> float:
         x = np.concatenate([x, [1]])
-        hidden_out = np.dot(self.hidden_layer, x)  # TODO: add sigmoid
+
+        hidden_out = self._leaky_relu(np.dot(self.hidden_layer, x))
         hidden_out = np.concatenate([hidden_out, [1]])
+
         output = np.dot(self.output_layer, hidden_out)
+
         return output
+
+    def _sigmoid(self, x: np.ndarray) -> np.ndarray:
+        return 1 / (1 + np.exp(-x))
+
+    def _leaky_relu(self, x: np.ndarray) -> np.ndarray:
+        return np.where(x > 0, x, x * 0.01)
 
 
 class SGDNeuralNetwork(INeuralNetwork):
