@@ -29,10 +29,6 @@ class IOptimizer(abc.ABC):
     def optimize(self, **kwargs) -> t.Tuple[n_net.EvolutionAlgNeuralNetwork, Experiment]:
         pass
 
-    @abc.abstractclassmethod
-    def best(self) -> n_net.INeuralNetwork:
-        pass
-
 
 class MuLambdaEvolutionStrategy(IOptimizer):
     @dataclass
@@ -58,10 +54,10 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         self.lambda_value = lambda_value
         self.optimized_func = optimized_func
         self.dataset = dataset
-        self.best_individual = None
 
     def optimize(
         self,
+        *,
         experiment_name: str,
         in_channels: int,
         n_hidden_neurons: int,
@@ -108,10 +104,10 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         while iteration <= n_iters and min(losses) > best_loss_treshold:
             new_population = self._select4reproduce(curr_population, losses)
 
+            new_population = self._crossover(new_population)
             new_population = self._mutation(
                 new_population, tau=mutation_tau, tau_prime=mutation_tau_prime
             )
-            new_population = self._crossover(new_population)
 
             losses = self._assess_population(new_population)
 
@@ -131,12 +127,8 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         end = time.time()
 
         alg_trace.experiment_time_in_seconds = end - start
-        self.best_individual = alg_trace.best_individual
 
-        return self.best_individual, alg_trace
-
-    def best(self) -> n_net.INeuralNetwork:
-        return self.best_individual
+        return alg_trace.best_individual, alg_trace
 
     def _assess_population(self, population: MuLambdaEvolutionStrategy.Population) -> t.List[float]:
         losses = []
