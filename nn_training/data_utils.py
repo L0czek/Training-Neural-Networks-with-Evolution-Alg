@@ -19,6 +19,7 @@ class IDataGenerator(abc.ABC):
     def __iter__(self):
         return self
 
+
 class UniformDistribution(IDataGenerator):
     def __init__(self, seed, start, end):
         super().__init__(seed)
@@ -27,4 +28,3 @@ class UniformDistribution(IDataGenerator):
 
     def __next__(self) -> np.ndarray:
         return np.array([self.random() * (self.end - self.start) + self.start])
-
