@@ -386,12 +386,11 @@ class DiffEvolution(IOptimizer):
         loss = self._assess_population(population, probe_times)
         min_loss_index = np.argmin(loss)
         min_loss = loss[min_loss_index]
-        experiment.best_individual_iteration = epoch
 
         experiment.losses_per_epoch.append(loss)
 
         if min_loss < experiment.best_individual_loss:
-            experiment.best_individual_iteration = min_loss_index
+            experiment.best_individual_iteration = epoch
             experiment.best_individual_loss = min_loss
             experiment.best_individual = copy.deepcopy(population[min_loss_index])
 
@@ -399,8 +398,6 @@ class DiffEvolution(IOptimizer):
             f"\rEpoch {epoch} loss = {experiment.best_individual_loss}"
         )
         sys.stdout.flush()
-
-        return loss, min_loss
 
 
 class GradientDescent(IOptimizer):
