@@ -1,6 +1,8 @@
 import abc
 
 import numpy as np
+import torch
+import torch.nn as nn
 
 
 class INeuralNetwork(abc.ABC):
@@ -56,5 +58,22 @@ class EvolutionAlgNeuralNetwork(INeuralNetwork):
         return np.where(x > 0, x, x * 0.01)
 
 
-class SGDNeuralNetwork(INeuralNetwork):
-    pass
+class GradientDescentNeuralNetwork(nn.Module):
+    def __init__(self, in_channels: int, n_hidden_neurons: int, out_channels: int):
+        super().__init__()
+        torch.manual_seed(0)
+
+        self.hidden_layer = nn.Linear(in_features=in_channels, out_features=n_hidden_neurons)
+        self.output_layer = nn.Linear(in_features=n_hidden_neurons, out_features=out_channels)
+
+    def predict(self, x: np.ndarray) -> np.ndarray:
+        predition = self.forward(torch.tensor(x, dtype=torch.float))
+
+        return predition.detach().numpy()
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        x = self.hidden_layer(X)
+        x = nn.functional.leaky_relu(x, negative_slope=0.01)
+        x = self.output_layer(x)
+
+        return x
