@@ -251,3 +251,128 @@ class MuLambdaEvolutionStrategy(IOptimizer):
             ),
             sorted_losses[: self.mu_value],
         )
+
+
+class DiffEvolution(IOptimizer):
+    def __init__(
+        self,
+        *,
+        optimized_func: t.Callable[[float], float],
+        dataset: utils.IDataGenerator,
+        population_size: int = 1000
+    ):
+        self.optimized_func = optimized_func
+        self.dataset = dataset
+        self.population_size = population_size
+
+    def optimize(
+        self,
+        *,
+        experiment_name: str,
+        in_channels: int,
+        n_hidden_neurons: int,
+        out_channels: int,
+        f_factor: float = 0.5,
+        min_f_factor: float = 0.01,
+        n_iters: int = 100,
+        best_loss_treshold: float = 1e-3,
+        probe_times: int = 1000,
+        gamma: float = 1.0
+    ) -> Experiment:
+        experiment = Experiment(
+            name = experiment_name,
+            losses_per_epoch = [],
+            experiment_time_in_seconds = 0,
+            best_individual = None,
+            best_individual_loss = float("inf"),
+            best_individual_iteration = 0
+        )
+
+        start = time.time()
+
+        population = [
+            n_net.EvolutionAlgNeuralNetwork(in_channels, n_hidden_neurons, out_channels)
+                for _ in range(self.population_size)
+        ]
+
+        for iteration in range(n_iters):
+            for ind, current_specimen in enumerate(population):
+                d = np.random.choice(population)
+                e = np.random.choice(population)
+                current_specimen_weights = current_specimen.get_weights()
+
+                mutated_specimen_weights = \
+                    current_specimen_weights + f_factor * (e.get_weights() - d.get_weights())
+                new_specimen_wieghts = self._cross_specimen_weights_bin(
+                    mutated_specimen_weights, current_specimen_weights)
+                new_specimen = n_net.EvolutionAlgNeuralNetwork(in_channels, n_hidden_neurons, out_channels)
+                new_specimen.update_weights(new_specimen_wieghts)
+
+                population[ind] = self._tournament(current_specimen, new_specimen, probe_times)
+
+            loss, current_min_loss = self._trace_loss(population, experiment, probe_times, iteration)
+            # if current_min_loss < experiment.best_individual_loss:
+            f_factor = max(f_factor * gamma, min_f_factor)
+
+            if experiment.best_individual_loss < best_loss_treshold:
+                break
+
+        stop = time.time()
+        experiment.experiment_time_in_seconds = stop - start
+
+        return experiment
+
+    def _assess_specimen(self, specimen: n_net.EvolutionAlgNeuralNetwork, probe_times: int) -> float:
+        loss = np.zeros((probe_times))
+        for i, x in zip(range(probe_times), self.dataset):
+            loss[i] = ev.MSE(specimen.predict(x), self.optimized_func(x))
+        return np.average(loss)
+
+    def _assess_population(self, population: t.List[n_net.EvolutionAlgNeuralNetwork], probe_times: int) -> t.List[float]:
+        losses = np.zeros((len(population)))
+        for ind, specimen in enumerate(population):
+            losses[ind] = self._assess_specimen(specimen, probe_times)
+        return losses
+
+    def _cross_specimen_weights_bin(self, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        selector = np.random.randint(2, size=a.shape[0])
+        inv_selector = np.ones(a.shape) - selector
+        # This is just a "bit mask" to quickly take either value either from a or b
+        return a * selector + b * inv_selector
+
+    def _cross_specimen_weights_pivot(self, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+        end = a.shape[0]
+        pivot = np.random.randint(0, end)
+        selector = np.concatenate([np.ones(pivot), np.zeros(end - pivot)])
+        inv_selector = np.ones(end) - selector
+        return a * selector + b * inv_selector
+
+    def _tournament(
+            self,
+            a: n_net.EvolutionAlgNeuralNetwork, b: n_net.EvolutionAlgNeuralNetwork,
+            probe_times: int
+        ) -> n_net.EvolutionAlgNeuralNetwork:
+        loss_a = self._assess_specimen(a, probe_times)
+        loss_b = self._assess_specimen(b, probe_times)
+
+        if loss_a < loss_b:
+            return a
+        else:
+            return b
+
+    def _trace_loss(self, population: t.List[n_net.EvolutionAlgNeuralNetwork], experiment: Experiment, probe_times: int, epoch: int) -> None:
+        loss = self._assess_population(population, probe_times)
+        min_loss_index = np.argmin(loss)
+        min_loss = loss[min_loss_index]
+        experiment.best_individual_iteration = epoch
+
+        experiment.losses_per_epoch.append(loss)
+
+        if min_loss < experiment.best_individual_loss:
+            experiment.best_individual = min_loss_index
+            experiment.best_individual_loss = min_loss
+            experiment.best_individual = population[min_loss_index]
+
+        print(f"Epoch {epoch} loss = {experiment.best_individual_loss}", flush=True, )
+
+        return loss, min_loss
