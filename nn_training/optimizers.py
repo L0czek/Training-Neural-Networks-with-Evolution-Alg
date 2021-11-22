@@ -5,6 +5,7 @@ import copy
 import random
 import time
 import typing as t
+import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -302,15 +303,15 @@ class DiffEvolution(IOptimizer):
 
         for iteration in range(n_iters):
             for ind, current_specimen in enumerate(population):
+                r = np.random.choice(population)
                 d = np.random.choice(population)
                 e = np.random.choice(population)
-                current_specimen_weights = current_specimen.get_weights()
 
-                mutated_specimen_weights = current_specimen_weights + f_factor * (
+                mutated_specimen_weights = r.get_weights() + f_factor * (
                     e.get_weights() - d.get_weights()
                 )
                 new_specimen_wieghts = self._cross_specimen_weights_bin(
-                    mutated_specimen_weights, current_specimen_weights
+                    mutated_specimen_weights, r.get_weights()
                 )
                 new_specimen = n_net.EvolutionAlgNeuralNetwork(
                     in_channels, n_hidden_neurons, out_channels
@@ -319,10 +320,9 @@ class DiffEvolution(IOptimizer):
 
                 population[ind] = self._tournament(current_specimen, new_specimen, probe_times)
 
-            loss, current_min_loss = self._trace_loss(
+            self._trace_loss(
                 population, experiment, probe_times, iteration
             )
-            # if current_min_loss < experiment.best_individual_loss:
             f_factor = max(f_factor * gamma, min_f_factor)
 
             if experiment.best_individual_loss < best_loss_treshold:
@@ -386,21 +386,18 @@ class DiffEvolution(IOptimizer):
         loss = self._assess_population(population, probe_times)
         min_loss_index = np.argmin(loss)
         min_loss = loss[min_loss_index]
-        experiment.best_individual_iteration = epoch
 
         experiment.losses_per_epoch.append(loss)
 
         if min_loss < experiment.best_individual_loss:
-            experiment.best_individual = min_loss_index  # TUTAJ COŚ CHYBA NIE TAK czy nie miało być best_individual_iteration
+            experiment.best_individual_iteration = epoch
             experiment.best_individual_loss = min_loss
             experiment.best_individual = copy.deepcopy(population[min_loss_index])
 
-        print(
-            f"Epoch {epoch} loss = {experiment.best_individual_loss}",
-            flush=True,
+        sys.stdout.write(
+            f"\rEpoch {epoch} loss = {experiment.best_individual_loss}"
         )
-
-        return loss, min_loss
+        sys.stdout.flush()
 
 
 class GradientDescent(IOptimizer):
