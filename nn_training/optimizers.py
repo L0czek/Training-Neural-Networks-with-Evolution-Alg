@@ -101,7 +101,10 @@ class MuLambdaEvolutionStrategy(IOptimizer):
         min_loss = min(losses)
         experiment.best_individual = curr_population.individuals[losses.index(min_loss)]
         experiment.best_individual_loss = min_loss
-        print(f"Epoch 0 loss => {min_loss:.4f}")
+        sys.stdout.write(
+            f"\rEpoch 0 loss = {min_loss}"
+        )
+        sys.stdout.flush()
 
         iteration = 1
         while iteration <= n_iters and min(losses) > best_loss_treshold:
@@ -118,7 +121,10 @@ class MuLambdaEvolutionStrategy(IOptimizer):
             curr_population, losses = self._select_mu_best(new_population, losses)
 
             experiment.losses_per_epoch.append(losses)
-            print(f"Epoch {iteration} loss => {losses[0]:.4f}")
+            sys.stdout.write(
+                f"\rEpoch {iteration} loss = {experiment.best_individual_loss}"
+            )
+            sys.stdout.flush()
 
             if losses[0] < experiment.best_individual_loss:
                 experiment.best_individual = copy.deepcopy(curr_population.individuals[0])
@@ -440,7 +446,10 @@ class GradientDescent(IOptimizer):
             curr_loss = self._epoch(neural_net, lr, probe_times)
             experiment.losses_per_epoch.append(curr_loss)
 
-            print(f"Epoch {iteration} loss => {curr_loss}")
+            sys.stdout.write(
+                f"\rEpoch {iteration} loss = {experiment.best_individual_loss}"
+            )
+            sys.stdout.flush()
 
             if curr_loss < experiment.best_individual_loss:
                 experiment.best_individual = copy.deepcopy(neural_net)
