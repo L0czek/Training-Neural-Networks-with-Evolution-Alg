@@ -437,7 +437,7 @@ class GradientDescent(IOptimizer):
             best_individual_loss=float("inf"),
             best_individual_iteration=0,
         )
-
+        start_time = time.time()
         neural_net = n_net.GradientDescentNeuralNetwork(in_channels, n_hidden_neurons, out_channels)
 
         curr_loss = float("inf")
@@ -458,6 +458,7 @@ class GradientDescent(IOptimizer):
 
             iteration += 1
 
+        experiment.experiment_time_in_seconds = time.time() - start_time
         return experiment
 
     def _epoch(
